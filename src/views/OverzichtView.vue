@@ -6,10 +6,16 @@ const isLoading = ref(true)
 const fout = ref(null)
 const drawer = ref(false)
 const selectedPokemon = ref(null)
+const selectedDetails = ref(null)
+const selectedSpecies = ref(null)
+const evolutionChain = ref(null)
+const detailsLoading = ref(false)
 const page = ref(1)
 const perPage = 10
 const zoekterm = ref('')
 const actiefTabblad = ref('pokedex')
+const deferredPrompt = ref(null)
+const canInstall = ref(false)
 
 const favorieten = ref(JSON.parse(localStorage.getItem('pokedex-favorieten') || '[]'))
 
@@ -45,9 +51,83 @@ onMounted(async () => {
 
 const getId = (url) => url.split('/').filter(Boolean).pop()
 
-const openDrawer = (pokemon) => {
+const typeKleur = (type) => {
+  const kleuren = {
+    fire: 'deep-orange', water: 'blue', grass: 'green', electric: 'yellow-darken-2',
+    psychic: 'pink', ice: 'cyan', dragon: 'deep-purple', dark: 'brown',
+    fairy: 'pink-lighten-2', normal: 'grey', fighting: 'red-darken-2', flying: 'indigo-lighten-2',
+    poison: 'purple', ground: 'amber-darken-2', rock: 'grey-darken-1', bug: 'light-green',
+    ghost: 'deep-purple-lighten-2', steel: 'blue-grey', shadow: 'grey-darken-4'
+  }
+  return kleuren[type] || 'grey'
+}
+
+const statKleur = (waarde) => {
+  if (waarde >= 100) {
+    return 'green'
+  }
+
+  if (waarde >= 60) {
+    return 'blue'
+  }
+
+  if (waarde >= 40) {
+    return 'orange'
+  }
+
+  return 'red'
+}
+
+const flattenEvolution = (chain) => {
+  const resultaat = []
+  const doorloop = (node) => {
+    resultaat.push(node.species)
+    if (node.evolves_to?.length) node.evolves_to.forEach(doorloop)
+  }
+  doorloop(chain)
+  return resultaat
+}
+
+const laadPokemonDetails = async (id) => {
+  const response = await fetch(
+    `https://pokeapi.co/api/v2/pokemon/${id}`
+  )
+
+  return await response.json()
+}
+
+const laadSpecies = async (id) => {
+  const response = await fetch(
+    `https://pokeapi.co/api/v2/pokemon-species/${id}`
+  )
+
+  return await response.json()
+}
+
+const openDrawer = async (pokemon) => {
+  const id = getId(pokemon.url)
+
   selectedPokemon.value = pokemon
   drawer.value = true
+  detailsLoading.value = true
+
+  try {
+    selectedDetails.value = await laadPokemonDetails(id)
+
+    selectedSpecies.value = await laadSpecies(id)
+
+    const evoResponse = await fetch(
+      selectedSpecies.value.evolution_chain.url
+    )
+
+    const evoData = await evoResponse.json()
+
+    evolutionChain.value = flattenEvolution(evoData.chain)
+  } catch (error) {
+    console.error(error)
+  } finally {
+    detailsLoading.value = false
+  }
 }
 
 const gefilterdeData = computed(() => {
@@ -65,34 +145,124 @@ const totaalPaginas = computed(() => Math.ceil(gefilterdeData.value.length / per
 const onZoek = () => { page.value = 1 }
 
 const favorietPokemon = computed(() => {
-  return data.value.filter(p => favorieten.value.includes(p.name))
+  return data.value.filter((pokemon) => {
+    return favorieten.value.includes(pokemon.name)
+  })
 })
+
+const statNaam = (naam) => {
+  const namen = {
+    hp: 'HP', attack: 'Aanval', defense: 'Verdediging',
+    'special-attack': 'Sp. Aanval', 'special-defense': 'Sp. Verdediging', speed: 'Snelheid'
+  }
+  return namen[naam] || naam
+}
+
+onMounted(() => {
+   window.addEventListener('beforeinstallprompt', (e) => {
+    console.log('INSTALL PROMPT FIRED')
+    e.preventDefault()
+    deferredPrompt.value = e
+    canInstall.value = true
+  })
+
+  window.addEventListener('appinstalled', () => {
+    canInstall.value = false
+    deferredPrompt.value = null
+  })
+})
+
+const installApp = async () => {
+  if (!deferredPrompt.value) return
+
+  deferredPrompt.value.prompt()
+
+  const { outcome } = await deferredPrompt.value.userChoice
+
+  if (outcome === 'accepted') {
+    console.log('App geïnstalleerd')
+  }
+
+  deferredPrompt.value = null
+  canInstall.value = false
+}
 </script>
 
 <template>
   <v-app>
     <v-app-bar color="blue-darken-2" elevation="2">
-      <v-app-bar-title class="navbar-title">Pokédex</v-app-bar-title>
+  <v-app-bar-title class="navbar-title">Pokédex</v-app-bar-title>
 
-    </v-app-bar>
+  <v-spacer />
 
-    <v-navigation-drawer v-model="drawer" location="bottom" temporary height="400" style="border-radius: 16px 16px 0 0;">
+  <v-btn
+    v-if="canInstall"
+    color="yellow-darken-2"
+    variant="elevated"
+    @click="installApp"
+  >
+    Installeer
+  </v-btn>
+</v-app-bar>
+    <v-navigation-drawer v-model="drawer" location="left" temporary width="360"
+      style="border-radius: 16px 16px 16px 16px; overflow-y: auto; height: 550px; top: 100px;">
       <div class="drawer-header">
-        <img
-          v-if="selectedPokemon"
-          :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(selectedPokemon.url)}.png`"
-          class="drawer-sprite"
-        >
+        <img v-if="selectedPokemon"
+          :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${getId(selectedPokemon.url)}.png`"
+          class="drawer-sprite">
         <div>
           <p class="drawer-naam">{{ selectedPokemon?.name }}</p>
           <p class="drawer-id">#{{ selectedPokemon ? getId(selectedPokemon.url).padStart(4, '0') : '' }}</p>
+          <div v-if="selectedDetails" class="type-chips">
+            <v-chip v-for="t in selectedDetails.types" :key="t.type.name" :color="typeKleur(t.type.name)" size="x-small"
+              class="mr-1">{{ t.type.name }}</v-chip>
+          </div>
         </div>
         <v-btn icon="mdi-close" variant="text" color="white" class="drawer-close" @click="drawer = false"></v-btn>
       </div>
 
       <div class="drawer-body">
-        <p><strong>Naam:</strong> {{ selectedPokemon?.name }}</p>
-        <p><strong>ID:</strong> {{ selectedPokemon ? getId(selectedPokemon.url) : '' }}</p>
+        <div v-if="detailsLoading" class="text-center pa-4">
+          <v-progress-circular indeterminate color="blue" size="28"></v-progress-circular>
+        </div>
+
+        <template v-else-if="selectedDetails">
+
+
+          <p class="sectie-titel">Abilities</p>
+          <div class="ability-rij">
+            <v-chip v-for="a in selectedDetails.abilities" :key="a.ability.name"
+              :variant="a.is_hidden ? 'outlined' : 'tonal'" color="blue-darken-2" size="small" class="mr-1 mb-1">
+              {{ a.ability.name }}
+            </v-chip>
+          </div>
+
+          <v-divider class="my-3"></v-divider>
+
+          <p class="sectie-titel">Stats</p>
+          <div v-for="stat in selectedDetails.stats" :key="stat.stat.name" class="stat-rij">
+            <span class="stat-naam">{{ statNaam(stat.stat.name) }}</span>
+            <span class="stat-waarde">{{ stat.base_stat }}</span>
+            <v-progress-linear :model-value="stat.base_stat" :max="255" :color="statKleur(stat.base_stat)" rounded
+              height="6" class="stat-bar"></v-progress-linear>
+          </div>
+
+          <v-divider class="my-3"></v-divider>
+
+          <p class="sectie-titel">Evolutieketen</p>
+          <div v-if="evolutionChain" class="evo-keten">
+            <template v-for="(evo, index) in evolutionChain" :key="evo.name">
+              <div class="evo-item" @click="openDrawer(evo)">
+                <img
+                  :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(evo.url)}.png`"
+                  class="evo-sprite">
+                <span class="evo-naam">{{ evo.name }}</span>
+              </div>
+              <v-icon v-if="index < evolutionChain.length - 1" color="grey" size="18">mdi-chevron-right</v-icon>
+            </template>
+          </div>
+
+        </template>
       </div>
     </v-navigation-drawer>
 
@@ -112,17 +282,9 @@ const favorietPokemon = computed(() => {
 
         <v-window v-model="actiefTabblad">
           <v-window-item value="pokedex">
-            <v-text-field
-              v-model="zoekterm"
-              placeholder="Zoek Pokémon..."
-              prepend-inner-icon="mdi-magnify"
-              variant="outlined"
-              density="compact"
-              hide-details
-              bg-color="white"
-              class="zoekbalk"
-              @update:model-value="onZoek"
-            ></v-text-field>
+            <v-text-field v-model="zoekterm" placeholder="Zoek Pokémon..." prepend-inner-icon="mdi-magnify"
+              variant="outlined" density="compact" hide-details bg-color="white" class="zoekbalk"
+              @update:model-value="onZoek"></v-text-field>
 
             <div v-if="isLoading" class="loading">
               <v-progress-circular indeterminate color="blue"></v-progress-circular>
@@ -135,31 +297,24 @@ const favorietPokemon = computed(() => {
                 Geen Pokémon gevonden voor "{{ zoekterm }}"
               </p>
 
-              <div
-                v-for="pokemon in pagedData"
-                :key="pokemon.name"
-                class="pokemon-card"
-                @click="openDrawer(pokemon)"
-              >
+              <div v-for="pokemon in pagedData" :key="pokemon.name" class="pokemon-card" @click="openDrawer(pokemon)">
                 <img
                   :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(pokemon.url)}.png`"
-                  class="pokemon-sprite"
-                >
+                  class="pokemon-sprite">
                 <span class="pokemon-naam">{{ pokemon.name }}</span>
                 <span class="pokemon-id">#{{ getId(pokemon.url).padStart(4, '0') }}</span>
-                <v-icon
-                  class="ster-icon"
-                  :color="isFavoriet(pokemon.name) ? 'yellow-darken-2' : ''"
-                  @click="toggleFavoriet(pokemon, $event)"
-                >
+                <v-icon class="ster-icon" :color="isFavoriet(pokemon.name) ? 'yellow-darken-2' : ''"
+                  @click="toggleFavoriet(pokemon, $event)">
                   {{ isFavoriet(pokemon.name) ? 'mdi-star' : 'mdi-star-outline' }}
                 </v-icon>
               </div>
 
-              <div class="paginering" >
-                <v-btn :disabled="page === 1" @click="page--" icon="mdi-chevron-left" color="blue" variant="outlined" size="small"></v-btn>
+              <div class="paginering">
+                <v-btn :disabled="page === 1" @click="page--" icon="mdi-chevron-left" color="blue" variant="outlined"
+                  size="small"></v-btn>
                 <span class="pagina-tekst">Pagina {{ page }} / {{ totaalPaginas }}</span>
-                <v-btn :disabled="page >= totaalPaginas" @click="page++" icon="mdi-chevron-right" color="blue" variant="outlined" size="small"></v-btn>
+                <v-btn :disabled="page >= totaalPaginas" @click="page++" icon="mdi-chevron-right" color="blue"
+                  variant="outlined" size="small"></v-btn>
               </div>
             </div>
           </v-window-item>
@@ -172,23 +327,14 @@ const favorietPokemon = computed(() => {
             </div>
 
             <div v-else>
-              <div
-                v-for="pokemon in favorietPokemon"
-                :key="pokemon.name"
-                class="pokemon-card"
-                @click="openDrawer(pokemon)"
-              >
+              <div v-for="pokemon in favorietPokemon" :key="pokemon.name" class="pokemon-card"
+                @click="openDrawer(pokemon)">
                 <img
                   :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(pokemon.url)}.png`"
-                  class="pokemon-sprite"
-                >
+                  class="pokemon-sprite">
                 <span class="pokemon-naam">{{ pokemon.name }}</span>
                 <span class="pokemon-id">#{{ getId(pokemon.url).padStart(4, '0') }}</span>
-                <v-icon
-                  class="ster-icon"
-                  color="yellow-darken-2"
-                  @click="toggleFavoriet(pokemon, $event)"
-                >
+                <v-icon class="ster-icon" color="yellow-darken-2" @click="toggleFavoriet(pokemon, $event)">
                   mdi-star
                 </v-icon>
               </div>
@@ -278,8 +424,9 @@ const favorietPokemon = computed(() => {
 }
 
 .drawer-sprite {
-  width: 70px;
-  height: 70px;
+  width: 80px;
+  height: 80px;
+  image-rendering: pixelated;
 }
 
 .drawer-naam {
@@ -287,13 +434,17 @@ const favorietPokemon = computed(() => {
   font-weight: bold;
   font-size: 20px;
   text-transform: capitalize;
-  margin: 0 0 4px 12px;
+  margin: 0 0 2px 12px;
 }
 
 .drawer-id {
   color: white;
   font-size: 13px;
-  margin: 0 0 0 12px;
+  margin: 0 0 6px 12px;
+}
+
+.type-chips {
+  margin-left: 12px;
 }
 
 .drawer-close {
@@ -304,6 +455,105 @@ const favorietPokemon = computed(() => {
 
 .drawer-body {
   padding: 16px;
+}
+
+.info-rij {
+  display: flex;
+  gap: 8px;
+}
+
+.info-blok {
+  flex: 1;
+  background: #F0F4FF;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.info-label {
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.info-waarde {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1565C0;
+}
+
+.sectie-titel {
+  font-weight: 600;
+  font-size: 13px;
+  color: #555;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ability-rij {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.stat-rij {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.stat-naam {
+  font-size: 12px;
+  color: #666;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.stat-waarde {
+  font-size: 13px;
+  font-weight: 600;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.stat-bar {
+  flex: 1;
+}
+
+.evo-keten {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.evo-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.evo-item:hover {
+  background: #EEF4FF;
+}
+
+.evo-sprite {
+  width: 56px;
+  height: 56px;
+}
+
+.evo-naam {
+  font-size: 11px;
+  text-transform: capitalize;
+  color: #555;
 }
 
 .paginering {
@@ -340,5 +590,4 @@ const favorietPokemon = computed(() => {
   text-align: center;
   margin: 0;
 }
-
 </style>

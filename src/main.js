@@ -8,6 +8,17 @@ import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
 
-const vuetify = createVuetify({ components, directives, icons: { defaultSet: 'mdi', aliases, sets: { mdi } } })
+import { registerSW } from 'virtual:pwa-register'
+registerSW()
+
+const vuetify = createVuetify({
+  components,
+  directives,
+  icons: {
+    defaultSet: 'mdi',
+    aliases,
+    sets: { mdi }
+  }
+})
 
 createApp(App).use(router).use(vuetify).mount('#app')
