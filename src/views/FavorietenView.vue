@@ -80,9 +80,9 @@ const statKleur = (waarde) => {
 
 const flattenEvolution = (chain) => {
   const resultaat = []
-  const doorloop = (node) => {
-    resultaat.push(node.species)
-    if (node.evolves_to?.length) node.evolves_to.forEach(doorloop)
+  const doorloop = (pokemon) => {
+    resultaat.push(pokemon.species)
+    if (pokemon.evolves_to?.length) pokemon.evolves_to.forEach(doorloop)
   }
   doorloop(chain)
   return resultaat
