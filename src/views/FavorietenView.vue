@@ -1,4 +1,4 @@
-<script setup>
+  <script setup>
 import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -13,10 +13,7 @@ const selectedDetails = ref(null)
 const selectedSpecies = ref(null)
 const evolutionChain = ref(null)
 const detailsLoading = ref(false)
-const page = ref(1)
-const perPage = 10
-const zoekterm = ref('')
-const actiefTabblad = ref('pokedex')
+const actiefTabblad = ref('favorieten')
 const deferredPrompt = ref(null)
 const canInstall = ref(false)
 
@@ -133,19 +130,11 @@ const openDrawer = async (pokemon) => {
   }
 }
 
-const gefilterdeData = computed(() => {
-  if (!zoekterm.value) return data.value
-  return data.value.filter(p => p.name.includes(zoekterm.value.toLowerCase()))
+const favorietPokemon = computed(() => {
+  return data.value.filter((pokemon) => {
+    return favorieten.value.includes(pokemon.name)
+  })
 })
-
-const pagedData = computed(() => {
-  const start = (page.value - 1) * perPage
-  return gefilterdeData.value.slice(start, start + perPage)
-})
-
-const totaalPaginas = computed(() => Math.ceil(gefilterdeData.value.length / perPage))
-
-const onZoek = () => { page.value = 1 }
 
 const statNaam = (naam) => {
   const namen = {
@@ -153,6 +142,12 @@ const statNaam = (naam) => {
     'special-attack': 'Sp. Aanval', 'special-defense': 'Sp. Verdediging', speed: 'Snelheid'
   }
   return namen[naam] || naam
+}
+
+const onTabbladChange = (waarde) => {
+  if (waarde === 'pokedex') {
+    router.push('/')
+  }
 }
 
 onMounted(() => {
@@ -182,30 +177,25 @@ const installApp = async () => {
   deferredPrompt.value = null
   canInstall.value = false
 }
-
-const onTabbladChange = (waarde) => {
-  if (waarde === 'favorieten') {
-    router.push('/favorieten')
-  }
-}
 </script>
 
 <template>
   <v-app>
     <v-app-bar color="blue-darken-2" elevation="2">
-  <v-app-bar-title class="navbar-title">Pokédex</v-app-bar-title>
+      <v-app-bar-title class="navbar-title">Pokédex</v-app-bar-title>
 
-  <v-spacer />
+      <v-spacer />
 
-  <v-btn
-    v-if="canInstall"
-    color="yellow-darken-2"
-    variant="elevated"
-    @click="installApp"
-  >
-    Installeer
-  </v-btn>
-</v-app-bar>
+      <v-btn
+        v-if="canInstall"
+        color="yellow-darken-2"
+        variant="elevated"
+        @click="installApp"
+      >
+        Installeer
+      </v-btn>
+    </v-app-bar>
+
     <v-navigation-drawer v-model="drawer" location="left" temporary width="360"
       style="border-radius: 16px 16px 16px 16px; overflow-y: auto; height: 550px; top: 100px;">
       <div class="drawer-header">
@@ -282,10 +272,6 @@ const onTabbladChange = (waarde) => {
           </v-tab>
         </v-tabs>
 
-        <v-text-field v-model="zoekterm" placeholder="Zoek Pokémon..." prepend-inner-icon="mdi-magnify"
-          variant="outlined" density="compact" hide-details bg-color="white" class="zoekbalk"
-          @update:model-value="onZoek"></v-text-field>
-
         <div v-if="isLoading" class="loading">
           <v-progress-circular indeterminate color="blue"></v-progress-circular>
           <p>Pokémon laden...</p>
@@ -293,28 +279,24 @@ const onTabbladChange = (waarde) => {
         <div v-else-if="fout" class="fout">{{ fout }}</div>
 
         <div v-else>
-          <p v-if="gefilterdeData.length === 0" class="geen-resultaten">
-            Geen Pokémon gevonden voor "{{ zoekterm }}"
-          </p>
-
-          <div v-for="pokemon in pagedData" :key="pokemon.name" class="pokemon-card" @click="openDrawer(pokemon)">
-            <img
-              :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(pokemon.url)}.png`"
-              class="pokemon-sprite">
-            <span class="pokemon-naam">{{ pokemon.name }}</span>
-            <span class="pokemon-id">#{{ getId(pokemon.url).padStart(4, '0') }}</span>
-            <v-icon class="ster-icon" :color="isFavoriet(pokemon.name) ? 'yellow-darken-2' : ''"
-              @click="toggleFavoriet(pokemon, $event)">
-              {{ isFavoriet(pokemon.name) ? 'mdi-star' : 'mdi-star-outline' }}
-            </v-icon>
+          <div v-if="favorietPokemon.length === 0" class="leeg-favorieten">
+            <v-icon size="64" color="grey-lighten-1">mdi-star-outline</v-icon>
+            <p class="leeg-tekst">Nog geen favorieten</p>
+            <p class="leeg-subtekst">Tik op ★ bij een Pokémon om hem hier toe te voegen.</p>
           </div>
 
-          <div class="paginering">
-            <v-btn :disabled="page === 1" @click="page--" icon="mdi-chevron-left" color="blue" variant="outlined"
-              size="small"></v-btn>
-            <span class="pagina-tekst">Pagina {{ page }} / {{ totaalPaginas }}</span>
-            <v-btn :disabled="page >= totaalPaginas" @click="page++" icon="mdi-chevron-right" color="blue"
-              variant="outlined" size="small"></v-btn>
+          <div v-else>
+            <div v-for="pokemon in favorietPokemon" :key="pokemon.name" class="pokemon-card"
+              @click="openDrawer(pokemon)">
+              <img
+                :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${getId(pokemon.url)}.png`"
+                class="pokemon-sprite">
+              <span class="pokemon-naam">{{ pokemon.name }}</span>
+              <span class="pokemon-id">#{{ getId(pokemon.url).padStart(4, '0') }}</span>
+              <v-icon class="ster-icon" color="yellow-darken-2" @click="toggleFavoriet(pokemon, $event)">
+                mdi-star
+              </v-icon>
+            </div>
           </div>
         </div>
 
@@ -337,10 +319,6 @@ const onTabbladChange = (waarde) => {
   max-width: 480px;
 }
 
-.zoekbalk {
-  margin: 12px 0;
-}
-
 .loading {
   text-align: center;
   margin-top: 40px;
@@ -349,12 +327,6 @@ const onTabbladChange = (waarde) => {
 .fout {
   color: red;
   text-align: center;
-}
-
-.geen-resultaten {
-  text-align: center;
-  color: #888;
-  margin-top: 24px;
 }
 
 .pokemon-card {
@@ -433,33 +405,6 @@ const onTabbladChange = (waarde) => {
   padding: 16px;
 }
 
-.info-rij {
-  display: flex;
-  gap: 8px;
-}
-
-.info-blok {
-  flex: 1;
-  background: #F0F4FF;
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.info-label {
-  font-size: 11px;
-  color: #888;
-  margin-bottom: 2px;
-}
-
-.info-waarde {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1565C0;
-}
-
 .sectie-titel {
   font-weight: 600;
   font-size: 13px;
@@ -529,19 +474,6 @@ const onTabbladChange = (waarde) => {
 .evo-naam {
   font-size: 11px;
   text-transform: capitalize;
-  color: #555;
-}
-
-.paginering {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  margin: 16px 0;
-}
-
-.pagina-tekst {
-  font-size: 14px;
   color: #555;
 }
 
