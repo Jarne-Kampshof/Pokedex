@@ -5,6 +5,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/',
   plugins: [
     vue(),
     vueDevTools(),
@@ -12,20 +13,20 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Pokédex',
-        short_name: 'Pokédex',
+        name: 'Pokedex',
+        short_name: 'Pokedex',
         theme_color: '#1565C0',
         background_color: '#EEF4FF',
         display: 'standalone',
         start_url: '/',
         icons: [
           {
-            src: '/pokédex1.png',
+            src: '/pokedex1.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pokédex.png',
+            src: '/pokedex.png',
             sizes: '512x512',
             type: 'image/png'
           }
